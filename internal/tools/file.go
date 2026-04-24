@@ -25,9 +25,9 @@ func (t *ReadTool) Spec() schema.ToolSpec {
 	return Spec("read_file", "Read file contents from the filesystem. Output always includes line numbers in format 'LINE_NUMBER|LINE_CONTENT' (1-indexed). Supports reading partial content by specifying line offset and limit for large files.", map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"path": map[string]any{"type": "string", "description": "Absolute or relative path to the file"},
+			"path":   map[string]any{"type": "string", "description": "Absolute or relative path to the file"},
 			"offset": map[string]any{"type": "integer", "description": "Starting line number (1-indexed)"},
-			"limit": map[string]any{"type": "integer", "description": "Number of lines to read"},
+			"limit":  map[string]any{"type": "integer", "description": "Number of lines to read"},
 		},
 		"required": []string{"path"},
 	})
@@ -101,7 +101,7 @@ func (t *WriteTool) Spec() schema.ToolSpec {
 	return Spec("write_file", "Write content to a file. Will overwrite existing files completely.", map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"path": map[string]any{"type": "string", "description": "Absolute or relative path to the file"},
+			"path":    map[string]any{"type": "string", "description": "Absolute or relative path to the file"},
 			"content": map[string]any{"type": "string", "description": "Complete content to write"},
 		},
 		"required": []string{"path", "content"},
@@ -151,7 +151,7 @@ func (t *EditTool) Spec() schema.ToolSpec {
 	return Spec("edit_file", "Perform exact string replacement in a file. The old_str must match exactly and appear uniquely in the file.", map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"path": map[string]any{"type": "string", "description": "Absolute or relative path to the file"},
+			"path":    map[string]any{"type": "string", "description": "Absolute or relative path to the file"},
 			"old_str": map[string]any{"type": "string", "description": "Exact string to find and replace (must be unique in file)"},
 			"new_str": map[string]any{"type": "string", "description": "Replacement string"},
 		},

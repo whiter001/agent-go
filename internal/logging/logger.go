@@ -14,9 +14,9 @@ import (
 )
 
 type Entry struct {
-	Time    time.Time   `json:"time"`
-	Type    string      `json:"type"`
-	Payload any         `json:"payload"`
+	Time    time.Time `json:"time"`
+	Type    string    `json:"type"`
+	Payload any       `json:"payload"`
 }
 
 type Logger struct {

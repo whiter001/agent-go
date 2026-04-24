@@ -21,9 +21,9 @@ func (t *RememberTool) Spec() schema.ToolSpec {
 	return Spec("remember", "Store a durable agent memory note in ~/.agent-go/.", map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"title": map[string]any{"type": "string", "description": "Short note title"},
+			"title":   map[string]any{"type": "string", "description": "Short note title"},
 			"content": map[string]any{"type": "string", "description": "The durable fact or workflow to remember"},
-			"tags": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Optional tags for recall"},
+			"tags":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Optional tags for recall"},
 		},
 		"required": []string{"content"},
 	})
@@ -52,9 +52,9 @@ func (t *RememberUserTool) Spec() schema.ToolSpec {
 	return Spec("remember_user", "Store a durable user profile fact in ~/.agent-go/.", map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"title": map[string]any{"type": "string", "description": "Short profile title"},
+			"title":   map[string]any{"type": "string", "description": "Short profile title"},
 			"content": map[string]any{"type": "string", "description": "The user preference or profile fact to remember"},
-			"tags": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Optional tags for recall"},
+			"tags":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Optional tags for recall"},
 		},
 		"required": []string{"content"},
 	})
@@ -85,7 +85,7 @@ func (t *SearchMemoryTool) Spec() schema.ToolSpec {
 		"properties": map[string]any{
 			"query": map[string]any{"type": "string", "description": "Search query"},
 			"limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 20, "default": 5},
-			"kind": map[string]any{"type": "string", "enum": []string{"memory", "user", "all"}, "default": "all", "description": "Which memory bucket to search"},
+			"kind":  map[string]any{"type": "string", "enum": []string{"memory", "user", "all"}, "default": "all", "description": "Which memory bucket to search"},
 		},
 		"required": []string{"query"},
 	})

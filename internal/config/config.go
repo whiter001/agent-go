@@ -39,7 +39,7 @@ type MCPConfig struct {
 }
 
 type ToolsConfig struct {
-	EnableFileTools        bool      `json:"enable_file_tools"`
+	EnableFileTools         bool      `json:"enable_file_tools"`
 	EnableBash              bool      `json:"enable_bash"`
 	EnableNote              bool      `json:"enable_note"`
 	EnableSkills            bool      `json:"enable_skills"`
@@ -82,7 +82,7 @@ func Default() Config {
 			SystemPromptPath: "system_prompt.md",
 		},
 		Tools: ToolsConfig{
-			EnableFileTools:        true,
+			EnableFileTools:         true,
 			EnableBash:              true,
 			EnableNote:              true,
 			EnableSkills:            true,

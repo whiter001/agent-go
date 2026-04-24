@@ -21,9 +21,9 @@ import (
 )
 
 type BashTool struct {
-	workspaceDir string
+	workspaceDir   string
 	defaultTimeout time.Duration
-	maxTimeout    time.Duration
+	maxTimeout     time.Duration
 }
 
 func NewBashTool(workspaceDir string) *BashTool {
@@ -38,8 +38,8 @@ func (t *BashTool) Spec() schema.ToolSpec {
 	return Spec("bash", "Execute shell commands in foreground or background. Use for terminal operations like git, npm, docker, etc. Do not use for file operations.", map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"command": map[string]any{"type": "string", "description": "Command to execute"},
-			"timeout": map[string]any{"type": "integer", "description": "Timeout in seconds for foreground commands"},
+			"command":           map[string]any{"type": "string", "description": "Command to execute"},
+			"timeout":           map[string]any{"type": "integer", "description": "Timeout in seconds for foreground commands"},
 			"run_in_background": map[string]any{"type": "boolean", "description": "Set true for long-running commands"},
 		},
 		"required": []string{"command"},
@@ -94,7 +94,7 @@ func (t *BashOutputTool) Spec() schema.ToolSpec {
 	return Spec("bash_output", "Get output from a background bash process.", map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"bash_id": map[string]any{"type": "string", "description": "Background shell process ID"},
+			"bash_id":        map[string]any{"type": "string", "description": "Background shell process ID"},
 			"filter_pattern": map[string]any{"type": "string", "description": "Optional regex filter for returned output"},
 		},
 		"required": []string{"bash_id"},
@@ -230,9 +230,9 @@ func (p *backgroundProcess) statusSummary() string {
 }
 
 type backgroundManager struct {
-	mu       sync.Mutex
+	mu        sync.Mutex
 	processes map[string]*backgroundProcess
-	counter  int64
+	counter   int64
 }
 
 var bashBackgroundManager = &backgroundManager{processes: map[string]*backgroundProcess{}}

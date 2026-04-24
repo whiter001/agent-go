@@ -18,19 +18,19 @@ import (
 )
 
 type Agent struct {
-	client        llm.Client
-	tools         map[string]tools.Tool
-	toolSpecs     []schema.ToolSpec
-	messages      []schema.Message
-	ephemeral     []schema.Message
-	systemPrompt  string
-	workspaceDir  string
-	maxSteps      int
-	tokenLimit    int
-	logger        *logging.Logger
-	out           io.Writer
+	client         llm.Client
+	tools          map[string]tools.Tool
+	toolSpecs      []schema.ToolSpec
+	messages       []schema.Message
+	ephemeral      []schema.Message
+	systemPrompt   string
+	workspaceDir   string
+	maxSteps       int
+	tokenLimit     int
+	logger         *logging.Logger
+	out            io.Writer
 	apiTotalTokens int
-	cancelled     bool
+	cancelled      bool
 }
 
 func New(client llm.Client, systemPrompt string, toolList []tools.Tool, maxSteps int, tokenLimit int, workspaceDir string, logger *logging.Logger, out io.Writer) *Agent {

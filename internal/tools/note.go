@@ -24,7 +24,7 @@ func (t *SessionNoteTool) Spec() schema.ToolSpec {
 	return Spec("record_note", "Record important information as session notes for future reference.", map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"content": map[string]any{"type": "string", "description": "The information to record as a note"},
+			"content":  map[string]any{"type": "string", "description": "The information to record as a note"},
 			"category": map[string]any{"type": "string", "description": "Optional category/tag for this note"},
 		},
 		"required": []string{"content"},

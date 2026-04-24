@@ -160,7 +160,7 @@ func (c *anthropicClient) generateOnce(ctx context.Context, messages []schema.Me
 		Messages:  apiMessages,
 		Thinking: &anthropicThinking{
 			Type:         "enabled",
-			BudgetTokens:  1024,
+			BudgetTokens: 1024,
 		},
 	}
 	if len(tools) != 0 {
@@ -207,9 +207,9 @@ func (c *openAIClient) Generate(ctx context.Context, messages []schema.Message, 
 func (c *openAIClient) generateOnce(ctx context.Context, messages []schema.Message, tools []schema.ToolSpec) (schema.LLMResponse, error) {
 	apiMessages := convertMessagesForOpenAI(messages)
 	request := openAIRequest{
-		Model:       c.model,
-		Messages:    apiMessages,
-		ToolChoice:  "auto",
+		Model:      c.model,
+		Messages:   apiMessages,
+		ToolChoice: "auto",
 	}
 	if len(tools) != 0 {
 		request.Tools = make([]openAITool, 0, len(tools))
@@ -395,17 +395,17 @@ func parseOpenAIResponse(response openAIResponse) schema.LLMResponse {
 }
 
 type anthropicRequest struct {
-	Model     string            `json:"model"`
-	MaxTokens int               `json:"max_tokens"`
-	System    string            `json:"system,omitempty"`
+	Model     string             `json:"model"`
+	MaxTokens int                `json:"max_tokens"`
+	System    string             `json:"system,omitempty"`
 	Messages  []anthropicMessage `json:"messages"`
-	Tools     []anthropicTool   `json:"tools,omitempty"`
+	Tools     []anthropicTool    `json:"tools,omitempty"`
 	Thinking  *anthropicThinking `json:"thinking,omitempty"`
 }
 
 type anthropicMessage struct {
-	Role    string            `json:"role"`
-	Content []anthropicBlock   `json:"content"`
+	Role    string           `json:"role"`
+	Content []anthropicBlock `json:"content"`
 }
 
 type anthropicBlock struct {
@@ -426,7 +426,7 @@ type anthropicTool struct {
 }
 
 type anthropicThinking struct {
-	Type        string `json:"type"`
+	Type         string `json:"type"`
 	BudgetTokens int    `json:"budget_tokens"`
 }
 
@@ -440,21 +440,21 @@ type anthropicResponse struct {
 }
 
 type openAIRequest struct {
-	Model      string        `json:"model"`
+	Model      string          `json:"model"`
 	Messages   []openAIMessage `json:"messages"`
-	Tools      []openAITool  `json:"tools,omitempty"`
-	ToolChoice string        `json:"tool_choice,omitempty"`
+	Tools      []openAITool    `json:"tools,omitempty"`
+	ToolChoice string          `json:"tool_choice,omitempty"`
 }
 
 type openAIMessage struct {
-	Role       string         `json:"role"`
-	Content    *string        `json:"content,omitempty"`
+	Role       string           `json:"role"`
+	Content    *string          `json:"content,omitempty"`
 	ToolCalls  []openAIToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string         `json:"tool_call_id,omitempty"`
+	ToolCallID string           `json:"tool_call_id,omitempty"`
 }
 
 type openAITool struct {
-	Type     string       `json:"type"`
+	Type     string         `json:"type"`
 	Function openAIFunction `json:"function"`
 }
 
@@ -467,7 +467,7 @@ type openAIFunction struct {
 type openAIToolCall struct {
 	ID       string             `json:"id"`
 	Type     string             `json:"type"`
-	Function openAIToolFunction  `json:"function"`
+	Function openAIToolFunction `json:"function"`
 }
 
 type openAIToolFunction struct {
@@ -478,9 +478,9 @@ type openAIToolFunction struct {
 type openAIResponse struct {
 	Choices []struct {
 		Message struct {
-			Role      string              `json:"role"`
-			Content   *string             `json:"content"`
-			ToolCalls []openAIToolCall    `json:"tool_calls"`
+			Role      string           `json:"role"`
+			Content   *string          `json:"content"`
+			ToolCalls []openAIToolCall `json:"tool_calls"`
 		} `json:"message"`
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
@@ -502,7 +502,7 @@ func convertMessagesForAnthropic(messages []schema.Message) (string, []anthropic
 			}
 		case schema.RoleUser:
 			apiMessages = append(apiMessages, anthropicMessage{
-				Role: "user",
+				Role:    "user",
 				Content: []anthropicBlock{{Type: "text", Text: message.Content}},
 			})
 		case schema.RoleAssistant:
@@ -512,9 +512,9 @@ func convertMessagesForAnthropic(messages []schema.Message) (string, []anthropic
 			}
 			for _, toolCall := range message.ToolCalls {
 				blocks = append(blocks, anthropicBlock{
-					Type: "tool_use",
-					ID:   toolCall.ID,
-					Name: toolCall.Function.Name,
+					Type:  "tool_use",
+					ID:    toolCall.ID,
+					Name:  toolCall.Function.Name,
 					Input: toolCall.Function.Arguments,
 				})
 			}
