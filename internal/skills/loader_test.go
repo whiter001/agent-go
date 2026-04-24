@@ -108,6 +108,9 @@ func TestSelectAndBuildTurnContext(t *testing.T) {
 	if !strings.Contains(ctx[0].Content, "1. Alpha: Alpha deploy helper. More alpha deploy guidance.") {
 		t.Fatalf("BuildTurnContext() missing selected skill: %q", ctx[0].Content)
 	}
+	if !strings.Contains(ctx[0].Content, "### Alpha") {
+		t.Fatalf("BuildTurnContext() missing section excerpt: %q", ctx[0].Content)
+	}
 }
 
 func TestFirstParagraphSkipsFrontmatter(t *testing.T) {
@@ -126,5 +129,136 @@ Extra text.`
 
 	if got, want := firstParagraph(content), "Use this skill when you need to control Chrome with autobrowser."; got != want {
 		t.Fatalf("firstParagraph() = %q, want %q", got, want)
+	}
+}
+
+func TestReadSkillParsesStructuredFrontmatter(t *testing.T) {
+	root := t.TempDir()
+	path := writeSkillFixture(t, root, "browser-flow", `---
+name: Autobrowser Flow
+description: Use this workflow for autobrowser CLI tasks.
+tools: [autobrowser, bash]
+tags:
+  - browser
+  - automation
+triggers:
+  - 执行autobrowser help
+platform: windows
+---
+
+# Overview
+
+Use this skill when you need to drive autobrowser from the CLI.
+
+## Steps
+
+1. Run autobrowser help.
+2. Inspect supported commands.
+`)
+
+	skill, err := readSkill(path)
+	if err != nil {
+		t.Fatalf("readSkill() error = %v", err)
+	}
+	if skill.Name != "Autobrowser Flow" {
+		t.Fatalf("skill.Name = %q, want %q", skill.Name, "Autobrowser Flow")
+	}
+	if skill.Description != "Use this workflow for autobrowser CLI tasks." {
+		t.Fatalf("skill.Description = %q, want %q", skill.Description, "Use this workflow for autobrowser CLI tasks.")
+	}
+	if got, want := strings.Join(skill.Tools, ","), "autobrowser,bash"; got != want {
+		t.Fatalf("skill.Tools = %q, want %q", got, want)
+	}
+	if got, want := strings.Join(skill.Tags, ","), "browser,automation"; got != want {
+		t.Fatalf("skill.Tags = %q, want %q", got, want)
+	}
+	if got, want := strings.Join(skill.Triggers, ","), "执行autobrowser help"; got != want {
+		t.Fatalf("skill.Triggers = %q, want %q", got, want)
+	}
+	if skill.Platform != "windows" {
+		t.Fatalf("skill.Platform = %q, want %q", skill.Platform, "windows")
+	}
+	if strings.Contains(skill.Content, "tools:") {
+		t.Fatalf("skill.Content should not retain frontmatter: %q", skill.Content)
+	}
+	if len(skill.Sections) < 2 {
+		t.Fatalf("skill.Sections len = %d, want at least 2", len(skill.Sections))
+	}
+}
+
+func TestSelectPrefersToolMetadataForMixedLanguagePrompt(t *testing.T) {
+	root := t.TempDir()
+	writeSkillFixture(t, root, "browser-skill", `---
+name: Autobrowser Helper
+tools: [autobrowser]
+triggers: [执行autobrowser help, 打开百度]
+tags: [browser, automation]
+---
+
+# Steps
+
+Run autobrowser help first, then open the target page.
+`)
+	writeSkillFixture(t, root, "generic-help", `# Generic Help
+
+Use this note when checking generic command help output.
+`)
+
+	loader := NewLoader(root)
+	if err := loader.Discover(); err != nil {
+		t.Fatalf("Discover() error = %v", err)
+	}
+
+	selected := loader.Select("执行autobrowser help 打开百度", 1)
+	if got, want := len(selected), 1; got != want {
+		t.Fatalf("Select() len = %d, want %d", got, want)
+	}
+	if selected[0].Name != "Autobrowser Helper" {
+		t.Fatalf("Select() first skill = %q, want %q", selected[0].Name, "Autobrowser Helper")
+	}
+}
+
+func TestBuildTurnContextPrefersRelevantSections(t *testing.T) {
+	root := t.TempDir()
+	writeSkillFixture(t, root, "pwsh-check", `---
+name: PowerShell Check
+tools: [bash]
+platform: windows
+---
+
+# Overview
+
+Use this when validating Windows build scripts.
+
+## Steps
+
+Run the standard check script and review the output.
+
+## Validation
+
+Confirm pwsh executes the script successfully and verify the exit code.
+
+## Notes
+
+This section discusses unrelated editor preferences.
+`)
+
+	loader := NewLoader(root)
+	if err := loader.Discover(); err != nil {
+		t.Fatalf("Discover() error = %v", err)
+	}
+
+	ctx := loader.BuildTurnContext("pwsh validation", 1)
+	if got, want := len(ctx), 1; got != want {
+		t.Fatalf("BuildTurnContext() len = %d, want %d", got, want)
+	}
+	if !strings.Contains(ctx[0].Content, "### Validation") {
+		t.Fatalf("BuildTurnContext() missing Validation excerpt: %q", ctx[0].Content)
+	}
+	if strings.Contains(ctx[0].Content, "unrelated editor preferences") {
+		t.Fatalf("BuildTurnContext() included unrelated Notes excerpt: %q", ctx[0].Content)
+	}
+	if !strings.Contains(ctx[0].Content, "Platform: windows") {
+		t.Fatalf("BuildTurnContext() missing platform metadata: %q", ctx[0].Content)
 	}
 }

@@ -258,3 +258,69 @@ func TestRunPromptModeReportsNoSkillsFound(t *testing.T) {
 		t.Fatalf("runPromptMode() output = %q, want searched directory %q", output, root)
 	}
 }
+
+func TestRunPromptModeCreatesAutoSkillDraft(t *testing.T) {
+	originalClientFactory := promptClientFactory
+	originalLoggerFactory := promptLoggerFactory
+	originalMemoryFactory := promptMemoryStoreFactory
+	t.Cleanup(func() {
+		promptClientFactory = originalClientFactory
+		promptLoggerFactory = originalLoggerFactory
+		promptMemoryStoreFactory = originalMemoryFactory
+	})
+
+	stub := &stubClient{responses: []schema.LLMResponse{
+		{
+			ToolCalls: []schema.ToolCall{{
+				ID:   "bash-1",
+				Type: "function",
+				Function: schema.FunctionCall{
+					Name:      "bash",
+					Arguments: map[string]any{"command": "echo autobrowser help", "timeout": 10},
+				},
+			}},
+		},
+		{Content: "Done."},
+	}}
+
+	promptClientFactory = func(apiKey, apiBase, model, provider string, retry config.RetryConfig) (llm.Client, error) {
+		return stub, nil
+	}
+	promptLoggerFactory = func() (*logging.Logger, error) {
+		return nil, nil
+	}
+	promptMemoryStoreFactory = func() (*store.Store, error) {
+		return nil, nil
+	}
+
+	autoDir := t.TempDir()
+	cfg := config.Default()
+	cfg.LLM.APIKey = "test-key"
+	cfg.Tools.EnableFileTools = false
+	cfg.Tools.EnableBash = true
+	cfg.Tools.EnableNote = false
+	cfg.Tools.EnableMemory = false
+	cfg.Tools.EnableSkills = false
+	cfg.Tools.EnableAutoSkillCreation = true
+	cfg.Tools.AutoSkillDir = autoDir
+	cfg.Tools.AutoSkillMinToolCalls = 1
+	cfg.Agent.MaxSteps = 4
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runPromptMode(&stdout, &stderr, cfg, "执行autobrowser help 获取辅助"); err != nil {
+		t.Fatalf("runPromptMode() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "Auto-skill draft saved:") {
+		t.Fatalf("runPromptMode() output missing auto-skill message in %q", output)
+	}
+	entries, err := os.ReadDir(autoDir)
+	if err != nil {
+		t.Fatalf("ReadDir() error = %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatalf("expected auto-skill draft in %q", autoDir)
+	}
+}

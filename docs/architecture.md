@@ -64,7 +64,7 @@ Run logs are stored as newline-delimited JSON in `~/.agent-go/log/agent_run_*.lo
 
 ### `internal/skills`
 
-Skill discovery walks configured directories, finds `SKILL.md` files, scores them against the current query, and can build turn-context snippets from the most relevant skills.
+Skill discovery walks configured directories, finds `SKILL.md` files, parses lightweight frontmatter metadata, scores them against the current query, and builds section-aware turn-context snippets from the most relevant skills. Successful runs can also emit draft autoskills for later reuse.
 
 ## Current bootstrap note
 

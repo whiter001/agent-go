@@ -82,11 +82,26 @@ For local development, copy `.env.example` to `.env` and fill in the values you 
 - `AGENT_GO_ENABLE_NOTE`, `MINI_AGENT_ENABLE_NOTE`
 - `AGENT_GO_ENABLE_MEMORY`, `MINI_AGENT_ENABLE_MEMORY`
 - `AGENT_GO_ENABLE_SKILLS`, `MINI_AGENT_ENABLE_SKILLS`
+- `AGENT_GO_ENABLE_AUTO_SKILLS`, `MINI_AGENT_ENABLE_AUTO_SKILLS`
+- `AGENT_GO_ENABLE_AUTO_SKILL_CREATION`, `MINI_AGENT_ENABLE_AUTO_SKILL_CREATION`
+
+### Auto skill tuning
+
+- `AGENT_GO_AUTO_SKILLS_LIMIT`, `MINI_AGENT_AUTO_SKILLS_LIMIT`
+- `AGENT_GO_AUTO_SKILL_MIN_TOOL_CALLS`, `MINI_AGENT_AUTO_SKILL_MIN_TOOL_CALLS`
 
 ### Skill directories
 
 - `AGENT_GO_SKILLS_DIR`, `MINI_AGENT_SKILLS_DIR`
 - `AGENT_GO_AUTO_SKILL_DIR`, `MINI_AGENT_AUTO_SKILL_DIR`
+
+## Autoskill behavior
+
+- Auto skill discovery loads metadata from `SKILL.md` frontmatter when present.
+- Mixed Chinese/English prompts are tokenized more aggressively to improve skill selection.
+- Turn context uses section-aware excerpts rather than dumping large raw skill blocks.
+- When `enable_auto_skill_creation` is enabled, successful runs can emit draft autoskills into `auto_skill_dir`.
+- Draft generation is gated by `auto_skill_min_tool_calls` and skips duplicate traces with the same generated signature.
 
 ## MCP settings
 

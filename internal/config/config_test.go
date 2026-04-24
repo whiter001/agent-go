@@ -42,6 +42,10 @@ func TestLoadAppliesEnvOverridesAndNormalizes(t *testing.T) {
 	t.Setenv("AGENT_GO_MAX_STEPS", "77")
 	t.Setenv("AGENT_GO_WORKSPACE_DIR", " ./workspace-from-env ")
 	t.Setenv("AGENT_GO_SYSTEM_PROMPT_PATH", " ./prompts/system.md ")
+	t.Setenv("AGENT_GO_ENABLE_AUTO_SKILLS", "false")
+	t.Setenv("AGENT_GO_AUTO_SKILLS_LIMIT", "4")
+	t.Setenv("AGENT_GO_ENABLE_AUTO_SKILL_CREATION", "true")
+	t.Setenv("AGENT_GO_AUTO_SKILL_MIN_TOOL_CALLS", "3")
 	t.Setenv("AGENT_GO_SKILLS_DIR", " ./skills-from-env ")
 	t.Setenv("AGENT_GO_AUTO_SKILL_DIR", "~/auto-skills")
 
@@ -82,8 +86,17 @@ func TestLoadAppliesEnvOverridesAndNormalizes(t *testing.T) {
 	if cfg.Tools.SkillsDir != filepath.Clean("./skills-from-env") {
 		t.Fatalf("Tools.SkillsDir = %q, want %q", cfg.Tools.SkillsDir, filepath.Clean("./skills-from-env"))
 	}
-	if got, want := cfg.Tools.AutoSkillsLimit, 9; got != want {
+	if cfg.Tools.EnableAutoSkills {
+		t.Fatalf("Tools.EnableAutoSkills = true, want false")
+	}
+	if got, want := cfg.Tools.AutoSkillsLimit, 4; got != want {
 		t.Fatalf("Tools.AutoSkillsLimit = %d, want %d", got, want)
+	}
+	if !cfg.Tools.EnableAutoSkillCreation {
+		t.Fatalf("Tools.EnableAutoSkillCreation = false, want true")
+	}
+	if got, want := cfg.Tools.AutoSkillMinToolCalls, 3; got != want {
+		t.Fatalf("Tools.AutoSkillMinToolCalls = %d, want %d", got, want)
 	}
 	if !cfg.Tools.EnableMCP {
 		t.Fatalf("Tools.EnableMCP = false, want true")

@@ -7,6 +7,7 @@ This directory collects the living documentation for `agent-go`.
 - `usage.md` — current command-line entry points and runtime notes
 - `architecture.md` — how the packages fit together
 - `configuration.md` — config files, defaults, and environment variables
+- `autoskill-optimization-temp.md` — temporary phased design for autoskill improvements
 
 ## Current implementation status
 

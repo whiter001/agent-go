@@ -260,6 +260,26 @@ func (c *Config) ApplyEnv() {
 			c.Tools.EnableSkills = parsed
 		}
 	}
+	if value := envAny("AGENT_GO_ENABLE_AUTO_SKILLS", "MINI_AGENT_ENABLE_AUTO_SKILLS"); value != "" {
+		if parsed, err := strconv.ParseBool(value); err == nil {
+			c.Tools.EnableAutoSkills = parsed
+		}
+	}
+	if value := envAny("AGENT_GO_AUTO_SKILLS_LIMIT", "MINI_AGENT_AUTO_SKILLS_LIMIT"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			c.Tools.AutoSkillsLimit = parsed
+		}
+	}
+	if value := envAny("AGENT_GO_ENABLE_AUTO_SKILL_CREATION", "MINI_AGENT_ENABLE_AUTO_SKILL_CREATION"); value != "" {
+		if parsed, err := strconv.ParseBool(value); err == nil {
+			c.Tools.EnableAutoSkillCreation = parsed
+		}
+	}
+	if value := envAny("AGENT_GO_AUTO_SKILL_MIN_TOOL_CALLS", "MINI_AGENT_AUTO_SKILL_MIN_TOOL_CALLS"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			c.Tools.AutoSkillMinToolCalls = parsed
+		}
+	}
 	if value := envAny("AGENT_GO_SKILLS_DIR", "MINI_AGENT_SKILLS_DIR"); value != "" {
 		c.Tools.SkillsDir = value
 	}

@@ -270,7 +270,18 @@ func runPromptMode(stdout, stderr io.Writer, cfg config.Config, prompt string) e
 	agent.SetEphemeralContext(configuredTurnContext(cfg, prompt, memoryStore, skillLoader))
 	agent.AddUserMessage(prompt)
 	_, err = agent.Run(context.Background())
-	return err
+	if err != nil {
+		return err
+	}
+	if cfg.Tools.EnableAutoSkillCreation {
+		path, created, autoErr := skills.MaybeCreateAutoSkillDraft(prompt, agent.History(), cfg.Tools.AutoSkillDir, cfg.Tools.AutoSkillMinToolCalls)
+		if autoErr != nil {
+			_, _ = fmt.Fprintf(stderr, "Auto-skill draft skipped: %v\n", autoErr)
+		} else if created {
+			_, _ = fmt.Fprintf(stdout, "Auto-skill draft saved: %s\n", path)
+		}
+	}
+	return nil
 }
 
 func tryBuiltinPrompt(stdout io.Writer, cfg config.Config, prompt string) (bool, error) {
