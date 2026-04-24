@@ -62,7 +62,7 @@ func MaybeCreateAutoSkillDraft(prompt string, messages []schema.Message, autoSki
 	return path, true, nil
 }
 
-func extractSuccessfulExecutions(messages []schema.Message) ([]toolExecution, string, bool) {
+func extractToolExecutions(messages []schema.Message) ([]toolExecution, string) {
 	executions := make([]toolExecution, 0, 4)
 	indexes := map[string]int{}
 	finalAssistant := ""
@@ -89,15 +89,36 @@ func extractSuccessfulExecutions(messages []schema.Message) ([]toolExecution, st
 			executions[index].Success = !strings.HasPrefix(strings.TrimSpace(message.Content), "Error:")
 		}
 	}
+	return executions, finalAssistant
+}
+
+func extractSuccessfulExecutions(messages []schema.Message) ([]toolExecution, string, bool) {
+	executions, finalAssistant := extractToolExecutions(messages)
 	if len(executions) == 0 {
 		return nil, "", false
 	}
-	for _, execution := range executions {
-		if !execution.Success {
-			return nil, "", false
-		}
+	if !inferRunSuccess(executions, finalAssistant) {
+		return nil, "", false
 	}
 	return executions, finalAssistant, true
+}
+
+func inferRunSuccess(executions []toolExecution, finalAssistant string) bool {
+	for _, execution := range executions {
+		if !execution.Success {
+			return false
+		}
+	}
+	finalLower := strings.ToLower(strings.TrimSpace(finalAssistant))
+	for _, marker := range []string{"couldn't be completed", "task cancelled", "error:"} {
+		if strings.Contains(finalLower, marker) {
+			return false
+		}
+	}
+	if len(executions) > 0 {
+		return true
+	}
+	return strings.TrimSpace(finalAssistant) != ""
 }
 
 func autoSkillSignature(prompt string, executions []toolExecution) string {

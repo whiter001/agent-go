@@ -30,6 +30,7 @@ type Skill struct {
 	Triggers    []string
 	Platform    string
 	Sections    []SkillSection
+	Feedback    SkillFeedbackStats
 }
 
 type SkillSection struct {
@@ -39,13 +40,19 @@ type SkillSection struct {
 }
 
 type Loader struct {
-	directories []string
-	mu          sync.Mutex
-	skills      []Skill
+	directories       []string
+	feedbackStorePath string
+	mu                sync.Mutex
+	skills            []Skill
 }
 
 func NewLoader(directories ...string) *Loader {
 	return &Loader{directories: append([]string{}, directories...)}
+}
+
+func (l *Loader) SetFeedbackStorePath(path string) *Loader {
+	l.feedbackStorePath = config.ExpandPath(path)
+	return l
 }
 
 func (l *Loader) Discover() error {
@@ -81,6 +88,13 @@ func (l *Loader) Discover() error {
 	sort.Slice(skills, func(i, j int) bool {
 		return strings.ToLower(skills[i].Name) < strings.ToLower(skills[j].Name)
 	})
+	if statsByPath, err := loadSkillFeedbackStats(l.feedbackStorePath); err == nil {
+		for index := range skills {
+			if stats, ok := statsByPath[skills[index].Path]; ok {
+				skills[index].Feedback = stats
+			}
+		}
+	}
 	l.skills = skills
 	return nil
 }
@@ -105,6 +119,10 @@ func (l *Loader) MetadataPrompt() string {
 
 func (l *Loader) BuildTurnContext(query string, maxSkills int) []schema.Message {
 	selected := l.Select(query, maxSkills)
+	return l.BuildTurnContextForSelection(query, selected)
+}
+
+func (l *Loader) BuildTurnContextForSelection(query string, selected []Skill) []schema.Message {
 	if len(selected) == 0 {
 		return nil
 	}
@@ -221,7 +239,7 @@ func firstParagraph(content string) string {
 
 func scoreSkill(skill Skill, query queryProfile) int {
 	if len(query.Tokens) == 0 {
-		return 1
+		return 1 + feedbackRankingBonus(skill.Feedback)
 	}
 	score := 0
 	score += phraseScore(skill.Name, query.Compact, 28)
@@ -250,6 +268,10 @@ func scoreSkill(skill Skill, query queryProfile) int {
 	}, " "), query.Tokens) {
 		score += 10
 	}
+	if score == 0 {
+		return 0
+	}
+	score += feedbackRankingBonus(skill.Feedback)
 
 	return score
 }

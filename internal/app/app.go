@@ -42,6 +42,7 @@ var (
 	promptMemoryStoreFactory = func() (*store.Store, error) {
 		return store.New("")
 	}
+	promptSkillFeedbackPath = skills.DefaultFeedbackStorePath
 )
 
 type Args struct {
@@ -267,11 +268,18 @@ func runPromptMode(stdout, stderr io.Writer, cfg config.Config, prompt string) e
 	workspace := currentWorkspace(cfg)
 	toolList := configuredTools(cfg, workspace, memoryStore)
 	agent := agentruntime.New(client, systemPrompt, toolList, normalizedMaxSteps(cfg.Agent.MaxSteps), defaultPromptTokenLimit, workspace, logger, stdout)
-	agent.SetEphemeralContext(configuredTurnContext(cfg, prompt, memoryStore, skillLoader))
+	selectedSkills := configuredSelectedSkills(cfg, prompt, skillLoader)
+	agent.SetEphemeralContext(configuredTurnContext(cfg, prompt, memoryStore, skillLoader, selectedSkills))
 	agent.AddUserMessage(prompt)
 	_, err = agent.Run(context.Background())
 	if err != nil {
 		return err
+	}
+	if cfg.Tools.EnableAutoSkills && len(selectedSkills) > 0 {
+		feedbackErr := skills.RecordSkillSelectionFeedback(promptSkillFeedbackPath(), prompt, selectedSkills, agent.History())
+		if feedbackErr != nil {
+			_, _ = fmt.Fprintf(stderr, "Skill feedback skipped: %v\n", feedbackErr)
+		}
 	}
 	if cfg.Tools.EnableAutoSkillCreation {
 		path, created, autoErr := skills.MaybeCreateAutoSkillDraft(prompt, agent.History(), cfg.Tools.AutoSkillDir, cfg.Tools.AutoSkillMinToolCalls)
@@ -372,7 +380,7 @@ func configuredSkillLoader(cfg config.Config) (*skills.Loader, error) {
 	if !cfg.Tools.EnableSkills {
 		return nil, nil
 	}
-	loader := skills.NewLoader(configuredSkillDirectories(cfg)...)
+	loader := skills.NewLoader(configuredSkillDirectories(cfg)...).SetFeedbackStorePath(promptSkillFeedbackPath())
 	if err := loader.Discover(); err != nil {
 		return nil, err
 	}
@@ -417,13 +425,20 @@ func loadSystemPromptText(cfg config.Config) (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
-func configuredTurnContext(cfg config.Config, prompt string, memoryStore *store.Store, skillLoader *skills.Loader) []schema.Message {
+func configuredSelectedSkills(cfg config.Config, prompt string, skillLoader *skills.Loader) []skills.Skill {
+	if skillLoader == nil || !cfg.Tools.EnableAutoSkills {
+		return nil
+	}
+	return skillLoader.Select(prompt, cfg.Tools.AutoSkillsLimit)
+}
+
+func configuredTurnContext(cfg config.Config, prompt string, memoryStore *store.Store, skillLoader *skills.Loader, selectedSkills []skills.Skill) []schema.Message {
 	contextMessages := []schema.Message{}
 	if memoryStore != nil {
 		contextMessages = append(contextMessages, memoryStore.BuildTurnContext(prompt, 5)...)
 	}
-	if skillLoader != nil && cfg.Tools.EnableAutoSkills {
-		contextMessages = append(contextMessages, skillLoader.BuildTurnContext(prompt, cfg.Tools.AutoSkillsLimit)...)
+	if skillLoader != nil && cfg.Tools.EnableAutoSkills && len(selectedSkills) > 0 {
+		contextMessages = append(contextMessages, skillLoader.BuildTurnContextForSelection(prompt, selectedSkills)...)
 	}
 	return contextMessages
 }

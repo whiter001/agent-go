@@ -13,6 +13,7 @@ import (
 	"github.com/whiter001/agent-go/internal/llm"
 	"github.com/whiter001/agent-go/internal/logging"
 	"github.com/whiter001/agent-go/internal/schema"
+	"github.com/whiter001/agent-go/internal/skills"
 	"github.com/whiter001/agent-go/internal/store"
 )
 
@@ -133,10 +134,12 @@ func TestRunPromptModeExecutesWithInjectedClient(t *testing.T) {
 	originalClientFactory := promptClientFactory
 	originalLoggerFactory := promptLoggerFactory
 	originalMemoryFactory := promptMemoryStoreFactory
+	originalFeedbackPath := promptSkillFeedbackPath
 	t.Cleanup(func() {
 		promptClientFactory = originalClientFactory
 		promptLoggerFactory = originalLoggerFactory
 		promptMemoryStoreFactory = originalMemoryFactory
+		promptSkillFeedbackPath = originalFeedbackPath
 	})
 
 	stub := &stubClient{responses: []schema.LLMResponse{
@@ -162,6 +165,7 @@ func TestRunPromptModeExecutesWithInjectedClient(t *testing.T) {
 	promptMemoryStoreFactory = func() (*store.Store, error) {
 		return nil, nil
 	}
+	promptSkillFeedbackPath = func() string { return filepath.Join(t.TempDir(), "skill-feedback.json") }
 
 	cfg := config.Default()
 	cfg.LLM.APIKey = "test-key"
@@ -263,10 +267,12 @@ func TestRunPromptModeCreatesAutoSkillDraft(t *testing.T) {
 	originalClientFactory := promptClientFactory
 	originalLoggerFactory := promptLoggerFactory
 	originalMemoryFactory := promptMemoryStoreFactory
+	originalFeedbackPath := promptSkillFeedbackPath
 	t.Cleanup(func() {
 		promptClientFactory = originalClientFactory
 		promptLoggerFactory = originalLoggerFactory
 		promptMemoryStoreFactory = originalMemoryFactory
+		promptSkillFeedbackPath = originalFeedbackPath
 	})
 
 	stub := &stubClient{responses: []schema.LLMResponse{
@@ -292,6 +298,7 @@ func TestRunPromptModeCreatesAutoSkillDraft(t *testing.T) {
 	promptMemoryStoreFactory = func() (*store.Store, error) {
 		return nil, nil
 	}
+	promptSkillFeedbackPath = func() string { return filepath.Join(t.TempDir(), "skill-feedback.json") }
 
 	autoDir := t.TempDir()
 	cfg := config.Default()
@@ -322,5 +329,91 @@ func TestRunPromptModeCreatesAutoSkillDraft(t *testing.T) {
 	}
 	if len(entries) == 0 {
 		t.Fatalf("expected auto-skill draft in %q", autoDir)
+	}
+}
+
+func TestRunPromptModeRecordsSkillFeedback(t *testing.T) {
+	originalClientFactory := promptClientFactory
+	originalLoggerFactory := promptLoggerFactory
+	originalMemoryFactory := promptMemoryStoreFactory
+	originalFeedbackPath := promptSkillFeedbackPath
+	t.Cleanup(func() {
+		promptClientFactory = originalClientFactory
+		promptLoggerFactory = originalLoggerFactory
+		promptMemoryStoreFactory = originalMemoryFactory
+		promptSkillFeedbackPath = originalFeedbackPath
+	})
+
+	stub := &stubClient{responses: []schema.LLMResponse{
+		{
+			ToolCalls: []schema.ToolCall{{
+				ID:   "bash-1",
+				Type: "function",
+				Function: schema.FunctionCall{
+					Name:      "bash",
+					Arguments: map[string]any{"command": "echo autobrowser help", "timeout": 10},
+				},
+			}},
+		},
+		{Content: "Done."},
+	}}
+
+	promptClientFactory = func(apiKey, apiBase, model, provider string, retry config.RetryConfig) (llm.Client, error) {
+		return stub, nil
+	}
+	promptLoggerFactory = func() (*logging.Logger, error) {
+		return nil, nil
+	}
+	promptMemoryStoreFactory = func() (*store.Store, error) {
+		return nil, nil
+	}
+	feedbackPath := filepath.Join(t.TempDir(), "skill-feedback.json")
+	promptSkillFeedbackPath = func() string { return feedbackPath }
+
+	skillsDir := t.TempDir()
+	writeSkillFixture(t, skillsDir, "Alpha", "# Alpha\nGeneric workflow.\n")
+	betaPath := writeSkillFixture(t, skillsDir, "Beta", `---
+name: Beta
+tools: [bash]
+triggers: [执行autobrowser help]
+---
+
+# Steps
+
+Run autobrowser help first.
+`)
+
+	cfg := config.Default()
+	cfg.LLM.APIKey = "test-key"
+	cfg.Tools.EnableFileTools = false
+	cfg.Tools.EnableBash = true
+	cfg.Tools.EnableNote = false
+	cfg.Tools.EnableMemory = false
+	cfg.Tools.EnableSkills = true
+	cfg.Tools.EnableAutoSkills = true
+	cfg.Tools.AutoSkillsLimit = 1
+	cfg.Tools.EnableAutoSkillCreation = false
+	cfg.Tools.SkillsDir = skillsDir
+	cfg.Tools.AutoSkillDir = ""
+	cfg.Tools.SkillsExternalDirs = nil
+	cfg.Agent.MaxSteps = 4
+
+	if err := runPromptMode(&bytes.Buffer{}, &bytes.Buffer{}, cfg, "执行autobrowser help"); err != nil {
+		t.Fatalf("runPromptMode() error = %v", err)
+	}
+
+	loader := skills.NewLoader(skillsDir).SetFeedbackStorePath(feedbackPath)
+	if err := loader.Discover(); err != nil {
+		t.Fatalf("Discover() error = %v", err)
+	}
+	selected := loader.Select("", 1)
+	if got, want := len(selected), 1; got != want {
+		t.Fatalf("Select() len = %d, want %d", got, want)
+	}
+	if selected[0].Path != betaPath {
+		t.Fatalf("Select() first path = %q, want %q", selected[0].Path, betaPath)
+	}
+	if selected[0].Feedback.SuccessfulRuns == 0 || selected[0].Feedback.HelpfulRuns == 0 {
+		t.Fatalf("selected[0].Feedback = %#v, want recorded success/helpful stats", selected[0].Feedback)
 	}
 }

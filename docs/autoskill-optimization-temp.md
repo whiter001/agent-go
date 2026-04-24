@@ -10,6 +10,7 @@ Current progress in this workspace:
 - Phase 1 is implemented
 - Phase 2 core context extraction is implemented
 - Phase 3 baseline draft generation is implemented
+- Phase 4 baseline feedback ranking is implemented
 
 ## Current state
 
@@ -21,9 +22,9 @@ Today, autoskill in `agent-go` is primarily **retrieval-driven**:
 
 What is **not** fully wired yet:
 
-- feedback-driven ranking based on real runtime outcomes
-- adaptive ranking based on historical success/failure
 - promotion and cleanup workflows for generated draft skills
+- richer usefulness inference beyond tool-overlap heuristics
+- maintenance helpers for stale or overlapping autoskills
 
 ## Problems to solve
 
@@ -100,7 +101,7 @@ Acceptance criteria:
 
 ### Phase 3 — runtime feedback and draft generation
 
-Implementation status: baseline draft generation is now wired; ranking feedback remains pending.
+Implementation status: baseline draft generation is wired.
 
 Scope:
 
@@ -117,6 +118,8 @@ Acceptance criteria:
 
 ### Phase 4 — adaptive ranking and maintenance
 
+Implementation status: selection feedback persistence and ranking bonuses are wired; cleanup and promotion flows remain pending.
+
 Scope:
 
 - log which skills were selected for each run
@@ -131,14 +134,15 @@ Acceptance criteria:
 
 ## Immediate implementation plan
 
-The current coding pass implements **Phase 1**, the core of **Phase 2**, and a baseline for **Phase 3**:
+The current coding pass implements **Phase 1**, the core of **Phase 2**, a baseline for **Phase 3**, and the first half of **Phase 4**:
 
 1. add structured skill metadata parsing
 2. add improved tokenization for mixed-language prompts
 3. add weighted ranking over metadata and content
 4. add section-aware context extraction
 5. add draft autoskill generation from successful traces with duplicate protection
-6. add tests covering frontmatter, ranking, mixed-language prompts, section selection, and draft generation
+6. add selection feedback persistence and historical ranking bonuses
+7. add tests covering frontmatter, ranking, mixed-language prompts, section selection, draft generation, and feedback persistence
 
 ## Risks and mitigations
 
@@ -153,4 +157,4 @@ The current coding pass implements **Phase 1**, the core of **Phase 2**, and a b
 
 ## Follow-up after this pass
 
-The next change set should focus on ranking feedback, freshness scoring, and maintenance flows for generated draft skills.
+The next change set should focus on promotion/cleanup workflows, stronger usefulness inference, and maintenance flows for generated draft skills.

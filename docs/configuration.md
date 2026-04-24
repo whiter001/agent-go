@@ -100,8 +100,10 @@ For local development, copy `.env.example` to `.env` and fill in the values you 
 - Auto skill discovery loads metadata from `SKILL.md` frontmatter when present.
 - Mixed Chinese/English prompts are tokenized more aggressively to improve skill selection.
 - Turn context uses section-aware excerpts rather than dumping large raw skill blocks.
+- Skill selections are recorded in a local feedback store and successful/helpful history can improve future ranking.
 - When `enable_auto_skill_creation` is enabled, successful runs can emit draft autoskills into `auto_skill_dir`.
 - Draft generation is gated by `auto_skill_min_tool_calls` and skips duplicate traces with the same generated signature.
+- Ranking feedback is stored in `~/.agent-go/skill-feedback.json` by default.
 
 ## MCP settings
 
