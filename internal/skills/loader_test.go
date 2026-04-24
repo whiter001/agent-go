@@ -109,3 +109,22 @@ func TestSelectAndBuildTurnContext(t *testing.T) {
 		t.Fatalf("BuildTurnContext() missing selected skill: %q", ctx[0].Content)
 	}
 }
+
+func TestFirstParagraphSkipsFrontmatter(t *testing.T) {
+	content := `---
+name: autobrowser
+description: "Use when driving the autobrowser CLI"
+---
+
+# autobrowser Skill
+
+Use this skill when you need to control Chrome with autobrowser.
+
+## More
+
+Extra text.`
+
+	if got, want := firstParagraph(content), "Use this skill when you need to control Chrome with autobrowser."; got != want {
+		t.Fatalf("firstParagraph() = %q, want %q", got, want)
+	}
+}

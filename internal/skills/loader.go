@@ -154,9 +154,18 @@ func readSkill(path string) (Skill, error) {
 
 func firstParagraph(content string) string {
 	lines := strings.Split(content, "\n")
+	start := 0
+	if len(lines) > 0 && strings.TrimSpace(lines[0]) == "---" {
+		for index := 1; index < len(lines); index++ {
+			if strings.TrimSpace(lines[index]) == "---" {
+				start = index + 1
+				break
+			}
+		}
+	}
 	collecting := false
 	var parts []string
-	for _, line := range lines {
+	for _, line := range lines[start:] {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
 			if collecting && len(parts) > 0 {

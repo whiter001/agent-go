@@ -2,6 +2,7 @@ package app
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -11,11 +12,37 @@ import (
 	"strings"
 	"time"
 
+	agentruntime "github.com/whiter001/agent-go/internal/agent"
 	"github.com/whiter001/agent-go/internal/config"
+	"github.com/whiter001/agent-go/internal/llm"
+	"github.com/whiter001/agent-go/internal/logging"
+	"github.com/whiter001/agent-go/internal/schema"
+	"github.com/whiter001/agent-go/internal/skills"
+	"github.com/whiter001/agent-go/internal/store"
+	agenttools "github.com/whiter001/agent-go/internal/tools"
 	"github.com/whiter001/agent-go/internal/utils"
 )
 
 const Version = "0.1.0"
+
+const (
+	defaultPromptTokenLimit = 12000
+	defaultSystemPrompt     = `You are agent-go, a practical multi-step assistant.
+Use the available tools whenever they help you complete the user's request.
+When a user asks you to operate a local CLI or inspect command help, prefer using the bash tool and report real results instead of guessing.
+If skills or memory context is provided, use it when relevant.
+Keep responses concise, factual, and grounded in actual tool output.`
+)
+
+var (
+	promptClientFactory = llm.NewClient
+	promptLoggerFactory = func() (*logging.Logger, error) {
+		return logging.New("")
+	}
+	promptMemoryStoreFactory = func() (*store.Store, error) {
+		return store.New("")
+	}
+)
 
 type Args struct {
 	Workspace string
@@ -43,6 +70,10 @@ func Main(argv []string, stdout, stderr io.Writer) error {
 			return readLogFile(stdout, stderr, args.Filename)
 		}
 		return showLogDirectory(stdout, stderr)
+	}
+
+	if err := loadDefaultDotEnv(); err != nil {
+		return err
 	}
 
 	cfg, err := config.Load()
@@ -196,13 +227,325 @@ func readLogFile(stdout, stderr io.Writer, filename string) error {
 }
 
 func runPromptMode(stdout, stderr io.Writer, cfg config.Config, prompt string) error {
-	_, _ = fmt.Fprintln(stdout, "Prompt mode is not wired yet in this bootstrap build.")
-	_, _ = fmt.Fprintf(stdout, "Prompt: %s\n", prompt)
-	_, _ = fmt.Fprintf(stdout, "Workspace: %s\n", cfg.Agent.WorkspaceDir)
+	if handled, err := tryBuiltinPrompt(stdout, cfg, prompt); handled || err != nil {
+		return err
+	}
 	if strings.TrimSpace(cfg.LLM.APIKey) == "" {
 		_, _ = fmt.Fprintln(stdout, "Missing API key. Set AGENT_GO_API_KEY or a config file before running the agent.")
+		return nil
+	}
+
+	client, err := promptClientFactory(cfg.LLM.APIKey, cfg.LLM.APIBase, cfg.LLM.Model, cfg.LLM.Provider, cfg.LLM.Retry)
+	if err != nil {
+		return err
+	}
+	client.SetRetryCallback(func(err error, attempt int) {
+		_, _ = fmt.Fprintf(stderr, "Retry %d after error: %v\n", attempt, err)
+	})
+
+	logger, err := promptLoggerFactory()
+	if err != nil {
+		return err
+	}
+	if logger != nil {
+		defer logger.Close()
+	}
+
+	memoryStore, err := configuredMemoryStore(cfg)
+	if err != nil {
+		return err
+	}
+	skillLoader, err := configuredSkillLoader(cfg)
+	if err != nil {
+		return err
+	}
+	systemPrompt, err := configuredSystemPrompt(cfg, memoryStore, skillLoader)
+	if err != nil {
+		return err
+	}
+
+	workspace := currentWorkspace(cfg)
+	toolList := configuredTools(cfg, workspace, memoryStore)
+	agent := agentruntime.New(client, systemPrompt, toolList, normalizedMaxSteps(cfg.Agent.MaxSteps), defaultPromptTokenLimit, workspace, logger, stdout)
+	agent.SetEphemeralContext(configuredTurnContext(cfg, prompt, memoryStore, skillLoader))
+	agent.AddUserMessage(prompt)
+	_, err = agent.Run(context.Background())
+	return err
+}
+
+func tryBuiltinPrompt(stdout io.Writer, cfg config.Config, prompt string) (bool, error) {
+	if isSkillListingPrompt(prompt) {
+		return true, printAvailableSkills(stdout, cfg)
+	}
+	return false, nil
+}
+
+func isSkillListingPrompt(prompt string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(prompt))
+	if normalized == "" {
+		return false
+	}
+	if normalized == "skills" || normalized == "/skills" {
+		return true
+	}
+	mentionsSkills := strings.Contains(normalized, "skill") || strings.Contains(normalized, "skills") || strings.Contains(normalized, "技能")
+	if !mentionsSkills {
+		return false
+	}
+	for _, keyword := range []string{"list", "show", "display", "列出", "显示", "查看", "哪些", "所有", "全部", "当前"} {
+		if strings.Contains(normalized, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func printAvailableSkills(stdout io.Writer, cfg config.Config) error {
+	if !cfg.Tools.EnableSkills {
+		_, _ = fmt.Fprintln(stdout, "Skills are disabled in configuration.")
+		return nil
+	}
+
+	directories := configuredSkillDirectories(cfg)
+	loader := skills.NewLoader(directories...)
+	if err := loader.Discover(); err != nil {
+		return err
+	}
+
+	loaded := loader.Loaded()
+	if len(loaded) == 0 {
+		_, _ = fmt.Fprintln(stdout, "No skills found.")
+	} else {
+		_, _ = fmt.Fprintf(stdout, "Available skills (%d):\n", len(loaded))
+		for index, skill := range loaded {
+			_, _ = fmt.Fprintf(stdout, "%d. %s\n", index+1, skill.Name)
+			_, _ = fmt.Fprintf(stdout, "   Description: %s\n", skill.Description)
+			_, _ = fmt.Fprintf(stdout, "   Path: %s\n", skill.Path)
+		}
+	}
+
+	if len(directories) > 0 {
+		_, _ = fmt.Fprintln(stdout, "Searched directories:")
+		for _, directory := range directories {
+			_, _ = fmt.Fprintf(stdout, "- %s\n", directory)
+		}
 	}
 	return nil
+}
+
+func configuredSkillDirectories(cfg config.Config) []string {
+	seen := map[string]struct{}{}
+	directories := make([]string, 0, 2+len(cfg.Tools.SkillsExternalDirs))
+	for _, candidate := range append([]string{cfg.Tools.SkillsDir, cfg.Tools.AutoSkillDir}, cfg.Tools.SkillsExternalDirs...) {
+		resolved := config.ExpandPath(candidate)
+		if resolved == "" {
+			continue
+		}
+		if _, ok := seen[resolved]; ok {
+			continue
+		}
+		seen[resolved] = struct{}{}
+		directories = append(directories, resolved)
+	}
+	return directories
+}
+
+func configuredMemoryStore(cfg config.Config) (*store.Store, error) {
+	if !cfg.Tools.EnableMemory {
+		return nil, nil
+	}
+	return promptMemoryStoreFactory()
+}
+
+func configuredSkillLoader(cfg config.Config) (*skills.Loader, error) {
+	if !cfg.Tools.EnableSkills {
+		return nil, nil
+	}
+	loader := skills.NewLoader(configuredSkillDirectories(cfg)...)
+	if err := loader.Discover(); err != nil {
+		return nil, err
+	}
+	return loader, nil
+}
+
+func configuredSystemPrompt(cfg config.Config, memoryStore *store.Store, skillLoader *skills.Loader) (string, error) {
+	parts := []string{strings.TrimSpace(defaultSystemPrompt)}
+	loadedPrompt, err := loadSystemPromptText(cfg)
+	if err != nil {
+		return "", err
+	}
+	if loadedPrompt != "" {
+		parts[0] = loadedPrompt
+	}
+	if memoryStore != nil {
+		if memoryPrompt := strings.TrimSpace(memoryStore.BuildSystemPrompt()); memoryPrompt != "" {
+			parts = append(parts, memoryPrompt)
+		}
+	}
+	if skillLoader != nil {
+		if metadata := strings.TrimSpace(skillLoader.MetadataPrompt()); metadata != "" {
+			parts = append(parts, metadata)
+		}
+	}
+	return strings.Join(parts, "\n\n"), nil
+}
+
+func loadSystemPromptText(cfg config.Config) (string, error) {
+	path := strings.TrimSpace(cfg.Agent.SystemPromptPath)
+	if path == "" {
+		return "", nil
+	}
+	resolved := config.FindResourceFile(path)
+	if resolved == "" {
+		return "", nil
+	}
+	data, err := os.ReadFile(resolved)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(data)), nil
+}
+
+func configuredTurnContext(cfg config.Config, prompt string, memoryStore *store.Store, skillLoader *skills.Loader) []schema.Message {
+	contextMessages := []schema.Message{}
+	if memoryStore != nil {
+		contextMessages = append(contextMessages, memoryStore.BuildTurnContext(prompt, 5)...)
+	}
+	if skillLoader != nil && cfg.Tools.EnableAutoSkills {
+		contextMessages = append(contextMessages, skillLoader.BuildTurnContext(prompt, cfg.Tools.AutoSkillsLimit)...)
+	}
+	return contextMessages
+}
+
+func configuredTools(cfg config.Config, workspace string, memoryStore *store.Store) []agenttools.Tool {
+	toolList := make([]agenttools.Tool, 0, 10)
+	if cfg.Tools.EnableFileTools {
+		toolList = append(toolList,
+			agenttools.NewReadTool(workspace),
+			agenttools.NewWriteTool(workspace),
+			agenttools.NewEditTool(workspace),
+		)
+	}
+	if cfg.Tools.EnableBash {
+		toolList = append(toolList,
+			agenttools.NewBashTool(workspace),
+			agenttools.NewBashOutputTool(),
+			agenttools.NewBashKillTool(),
+		)
+	}
+	if cfg.Tools.EnableNote {
+		noteFile := defaultSessionNotesPath()
+		toolList = append(toolList,
+			agenttools.NewSessionNoteTool(noteFile),
+			agenttools.NewRecallNoteTool(noteFile),
+		)
+	}
+	if cfg.Tools.EnableMemory {
+		memoryTools, _ := agenttools.CreateMemoryTools(memoryStore)
+		toolList = append(toolList, memoryTools...)
+	}
+	return toolList
+}
+
+func normalizedMaxSteps(value int) int {
+	if value <= 0 {
+		return 20
+	}
+	return value
+}
+
+func defaultSessionNotesPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(".agent-go", "session_notes.json")
+	}
+	return filepath.Join(home, ".agent-go", "session_notes.json")
+}
+
+func loadDefaultDotEnv() error {
+	for _, candidate := range dotEnvCandidates() {
+		if candidate == "" {
+			continue
+		}
+		if _, err := os.Stat(candidate); err == nil {
+			return loadDotEnvFile(candidate)
+		} else if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+func dotEnvCandidates() []string {
+	seen := map[string]struct{}{}
+	paths := make([]string, 0, 4)
+	appendCandidate := func(path string) {
+		resolved := config.ExpandPath(path)
+		if resolved == "" {
+			return
+		}
+		if _, ok := seen[resolved]; ok {
+			return
+		}
+		seen[resolved] = struct{}{}
+		paths = append(paths, resolved)
+	}
+
+	appendCandidate(".env")
+	appendCandidate(filepath.Join("config", ".env"))
+	if executable, err := os.Executable(); err == nil {
+		resolved := executable
+		if symlinkResolved, err := filepath.EvalSymlinks(executable); err == nil {
+			resolved = symlinkResolved
+		}
+		exeDir := filepath.Dir(resolved)
+		appendCandidate(filepath.Join(exeDir, ".env"))
+		appendCandidate(filepath.Join(filepath.Dir(exeDir), ".env"))
+	}
+	return paths
+}
+
+func loadDotEnvFile(path string) error {
+	data, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		return err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		key, value, ok := parseDotEnvLine(line)
+		if !ok {
+			continue
+		}
+		if existing, exists := os.LookupEnv(key); exists && strings.TrimSpace(existing) != "" {
+			continue
+		}
+		_ = os.Setenv(key, value)
+	}
+	return nil
+}
+
+func parseDotEnvLine(line string) (string, string, bool) {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+		return "", "", false
+	}
+	if strings.HasPrefix(trimmed, "export ") {
+		trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "export "))
+	}
+	separator := strings.Index(trimmed, "=")
+	if separator <= 0 {
+		return "", "", false
+	}
+	key := strings.TrimSpace(trimmed[:separator])
+	if key == "" {
+		return "", "", false
+	}
+	value := strings.TrimSpace(trimmed[separator+1:])
+	if len(value) >= 2 {
+		if (value[0] == '\'' && value[len(value)-1] == '\'') || (value[0] == '"' && value[len(value)-1] == '"') {
+			value = value[1 : len(value)-1]
+		}
+	}
+	return key, value, true
 }
 
 func runInteractiveMode(stdout, stderr io.Writer, cfg config.Config) error {
